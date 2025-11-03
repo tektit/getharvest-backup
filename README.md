@@ -122,18 +122,26 @@ backups/
 
 ## Backed Up Data Types
 
-The tool backs up the following data from each account:
+The tool backs up the following data from each account based on the [official Harvest API specification](https://help.getharvest.com/api-v2/):
 
+**Core Data**
 - Company information
-- Users and user assignments
+- Users (including current user details and project assignments)
 - Clients and contacts
-- Projects and project assignments
-- Tasks and task assignments
+- Projects (including task and user assignments)
+- Tasks
 - Time entries
 - Expenses and expense categories
-- Invoices, invoice items, messages, and payments
-- Estimates, estimate items, and messages
+- Invoices and invoice item categories
+- Estimates and estimate item categories
 - Roles
+
+**Reports**
+- Project budget report
+
+**Note on Reports**: Time-based and expense reports (e.g., time by client, expenses by project) require specific date range parameters and are designed for ad-hoc reporting rather than full data backups. These are not included in the automatic backup. The underlying data is captured through the time entries and expenses endpoints.
+
+**Note on Nested Resources**: Resources like invoice messages, invoice payments, and estimate messages are accessible only through their parent resources (e.g., `/invoices/{id}/messages`) and are not available as standalone list endpoints. These may be added in a future version by iterating through parent resources.
 
 ## How It Works
 

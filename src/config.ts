@@ -21,12 +21,26 @@ export const API_CONFIG = {
 
 /**
  * Harvest API endpoints to backup
- * Based on https://help.getharvest.com/api-v2/
+ * Based on the official Harvest OpenAPI specification
+ * 
+ * Note: Report endpoints that require date range parameters (from/to) are excluded
+ * as they are designed for generating reports for specific time periods rather than
+ * complete data backups. These include:
+ * - reports/time/clients
+ * - reports/time/projects  
+ * - reports/time/tasks
+ * - reports/time/team
+ * - reports/expenses/categories
+ * - reports/expenses/clients
+ * - reports/expenses/projects
+ * - reports/expenses/team
+ * - reports/uninvoiced
  */
 export const HARVEST_ENDPOINTS = [
   'company',
   'users',
   'users/me',
+  'users/me/project_assignments',
   'clients',
   'contacts',
   'projects',
@@ -38,11 +52,9 @@ export const HARVEST_ENDPOINTS = [
   'expense_categories',
   'invoices',
   'invoice_item_categories',
-  'invoice_messages',
-  'invoice_payments',
   'estimates',
   'estimate_item_categories',
-  'estimate_messages',
   'roles',
-  'project_assignments',
+  // Only include reports that don't require date parameters
+  'reports/project_budget',
 ] as const;
