@@ -25,6 +25,26 @@ A TypeScript-based backup tool for Harvest Time Tracking data that creates a com
 
 ## Installation & Usage
 
+### Building the Application
+
+Before using Docker, you need to build the application:
+
+```bash
+# Build TypeScript and prepare for Docker
+npm install
+npm run build
+npm install --production
+
+# Then build Docker image
+docker build -t harvest-backup .
+```
+
+Or use the provided build script:
+
+```bash
+./build.sh
+```
+
 ### Option 1: Using Docker (Recommended)
 
 1. Build the Docker image:
