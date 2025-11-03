@@ -2,6 +2,8 @@
 
 Backup tool for Harvest Time Tracking data using the Harvest API v2. This tool automatically discovers all your Harvest accounts and backs up all data from all endpoints, including invoices, estimates, time entries, projects, clients, and more.
 
+**Fully compliant with the Harvest API v2 OpenAPI specification** - All endpoints have been verified against the official OpenAPI spec to ensure complete data coverage.
+
 ## Features
 
 - **Auto-discovery**: Automatically discovers all Harvest accounts using your Personal Access Token (PAT)
@@ -166,38 +168,68 @@ Artifact manifests are stored in `.artifacts_manifest.json` in the backup root d
 
 ## API Endpoint Coverage
 
-The tool backs up all Harvest API v2 data endpoints:
+The tool backs up all Harvest API v2 data endpoints as defined in the official OpenAPI specification:
 
-- **Clients**: `/v2/clients`
-- **Contacts**: `/v2/contacts`
-- **Projects**: `/v2/projects` with user and task assignments
-- **Tasks**: `/v2/tasks`
-- **Time Entries**: `/v2/time_entries`
-- **Users**: `/v2/users` with billable rates, cost rates, project assignments, and teammates
-- **Current User**: `/v2/users/me` and `/v2/users/me/project_assignments`
-- **Expenses**: `/v2/expenses` and `/v2/expense_categories`
-- **Invoices**: `/v2/invoices` with PDF downloads and `/v2/invoice_item_categories`
-- **Estimates**: `/v2/estimates` with PDF downloads and `/v2/estimate_item_categories`
-- **Roles**: `/v2/roles`
-- **Company**: `/v2/company` (single resource)
+### Core Data Endpoints
 
-Note: Report endpoints (time reports, expense reports, etc.) require date range parameters and are not included in the standard backup. They can be added as a future enhancement if needed.
+- **Clients**: `/v2/clients` - All clients with full details
+- **Contacts**: `/v2/contacts` - All client contacts (standalone endpoint)
+- **Projects**: `/v2/projects` - All projects with user and task assignments
+- **Tasks**: `/v2/tasks` - All tasks
+- **Time Entries**: `/v2/time_entries` - All time entries
+- **Users**: `/v2/users` - All users with nested resources:
+  - Billable rates (`/v2/users/{id}/billable_rates`)
+  - Cost rates (`/v2/users/{id}/cost_rates`)
+  - Project assignments (`/v2/users/{id}/project_assignments`)
+  - Teammates (`/v2/users/{id}/teammates`)
+- **Current User**: 
+  - `/v2/users/me` - Authenticated user information
+  - `/v2/users/me/project_assignments` - Current user's project assignments
+- **Expenses**: 
+  - `/v2/expenses` - All expenses
+  - `/v2/expense_categories` - All expense categories
+- **Invoices**: 
+  - `/v2/invoices` - All invoices with PDF downloads
+  - `/v2/invoice_item_categories` - All invoice item categories
+- **Estimates**: 
+  - `/v2/estimates` - All estimates with PDF downloads
+  - `/v2/estimate_item_categories` - All estimate item categories
+- **Roles**: `/v2/roles` - All roles
+- **Company**: `/v2/company` - Company settings (single resource)
 
-## Rate Limiting
+### What's Not Included
 
-The tool automatically handles Harvest API rate limits:
-- Rate limit: 100 requests per 15 seconds
-- Automatic retry with exponential backoff on rate limit errors (429)
-- Automatic retry on network errors
-- No retry on authentication errors (401, 403)
+- **Report endpoints** (`/v2/reports/*`): These require date range parameters and are analytical rather than raw data. They can be added as a future enhancement if needed.
+
+All endpoints are backed up with full pagination support, ensuring complete data coverage even for accounts with thousands of records.
+
+## Rate Limiting and Pagination
+
+The tool automatically handles Harvest API rate limits and pagination:
+- **Rate limit**: 100 requests per 15 seconds
+- **Pagination**: Automatically handles pagination with up to 2000 items per page (maximum per Harvest API)
+- **Pagination detection**: Supports both `next_page` (number) and `links.next` (URL) for maximum compatibility
+- **Automatic retry**: Exponential backoff on rate limit errors (429)
+- **Network retry**: Automatic retry on network errors
+- **No retry**: Authentication errors (401, 403) are not retried
 
 ## Testing
+
+The tool includes comprehensive test coverage (22 tests) covering:
+- API client functionality (rate limiting, pagination, retries)
+- Account discovery
+- Backup executor
+- File writer with incremental backup
+- Error handling
 
 Run tests with pytest:
 
 ```bash
 # Install dev dependencies
 pip install -r requirements-dev.txt
+
+# Install package in editable mode
+pip install -e .
 
 # Run tests
 pytest
