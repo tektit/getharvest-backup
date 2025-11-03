@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { HarvestClient } from './harvest-client.js';
 import { BackupService } from './backup-service.js';
+import { Logger } from './logger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -16,7 +17,7 @@ program
   .option('-o, --output <directory>', 'Output directory for backups', './backups')
   .action(async (options) => {
     try {
-      console.log('🚀 Starting Harvest backup...\n');
+      Logger.info('🚀 Starting Harvest backup...\n');
       
       const { token, output } = options;
 
@@ -28,13 +29,10 @@ program
 
       await backupService.backupAll();
 
-      console.log(`\n✅ All backups saved to: ${path.resolve(output)}`);
+      Logger.success(`All backups saved to: ${path.resolve(output)}`);
     } catch (error) {
-      if (error instanceof Error) {
-        console.error(`\n❌ Error: ${error.message}`);
-      } else {
-        console.error('\n❌ An unknown error occurred');
-      }
+      const message = error instanceof Error ? error.message : 'An unknown error occurred';
+      Logger.error(message);
       process.exit(1);
     }
   });

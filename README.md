@@ -145,6 +145,24 @@ The tool backs up the following data from each account:
 
 ## Development
 
+### Running Tests
+
+The project includes comprehensive test coverage using Vitest:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with UI
+npm run test:ui
+
+# Generate coverage report
+npm run test:coverage
+```
+
 ### Project Structure
 
 ```
