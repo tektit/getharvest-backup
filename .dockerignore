@@ -1,0 +1,8 @@
+.git
+*.md
+*.log
+.DS_Store
+.env
+backups
+src
+tsconfig.json

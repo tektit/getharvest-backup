@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  harvest-backup:
+    build: .
+    image: harvest-backup:latest
+    environment:
+      - HARVEST_TOKEN=${HARVEST_TOKEN}
+    volumes:
+      - ./backups:/app/backups
+    command: ["-t", "${HARVEST_TOKEN}", "-o", "/app/backups"]

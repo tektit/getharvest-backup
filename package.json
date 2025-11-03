@@ -1,0 +1,31 @@
+{
+  "name": "getharvest-backup",
+  "version": "1.0.0",
+  "description": "Backup tool for Harvest Time Tracking data",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "harvest-backup": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "harvest",
+    "backup",
+    "api"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
