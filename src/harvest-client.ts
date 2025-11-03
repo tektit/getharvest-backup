@@ -12,7 +12,6 @@ export interface AccountsResponse {
 
 export class HarvestClient {
   private client: AxiosInstance;
-  private accountClient: AxiosInstance | null = null;
 
   constructor(private pat: string) {
     this.client = axios.create({

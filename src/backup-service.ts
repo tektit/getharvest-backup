@@ -1,4 +1,5 @@
 import { HarvestClient, HarvestAccount } from './harvest-client.js';
+import { AxiosInstance } from 'axios';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -75,7 +76,7 @@ export class BackupService {
   }
 
   private async backupEndpoint(
-    accountClient: any,
+    accountClient: AxiosInstance,
     accountDir: string,
     endpoint: string
   ): Promise<void> {
