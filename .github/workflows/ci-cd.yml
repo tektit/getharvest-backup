@@ -70,9 +70,9 @@ jobs:
         run: |
           uv run python -c "import harvest_backup; print('Import successful')"
 
-      # - name: Test CLI help
-      #   run: |
-      #     uv run harvest-backup --help
+      - name: Test CLI help
+        run: |
+          uv run harvest-backup --help
 
       - name: Run all tests (unit and integration)
         run: |
@@ -98,6 +98,43 @@ jobs:
           path: |
             pyproject.toml
             src/harvest_backup/__init__.py
+
+      - name: Create environment info on failure
+        if: failure()
+        run: |
+          {
+            echo "## Environment Info"
+            echo ""
+            echo "### Python Version"
+            uv run python --version || echo "Failed to get Python version"
+            echo ""
+            echo "### uv Version"
+            uv --version || echo "Failed to get uv version"
+            echo ""
+            echo "### Installed Packages"
+            uv pip list || echo "Failed to list packages"
+            echo ""
+            echo "### Python Path"
+            uv run python -c "import sys; print('\n'.join(sys.path))" || echo "Failed to get Python path"
+            echo ""
+            echo "### Package Installation Check"
+            uv run python -c "import harvest_backup; print(f'harvest_backup location: {harvest_backup.__file__}')" || echo "Failed to import harvest_backup"
+            echo ""
+            echo "### Directory Structure"
+            find . -type f -name "*.py" | head -20 || echo "Failed to list files"
+          } > debug-env-info.txt
+
+          # Also add to step summary for visibility
+          cat debug-env-info.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload workspace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-workspace
+          retention-days: 7
+          path: .
+          if-no-files-found: ignore
 
   docker-release:
     name: Docker Release
