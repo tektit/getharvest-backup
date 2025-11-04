@@ -121,7 +121,7 @@ jobs:
             uv run python -c "import harvest_backup; print(f'harvest_backup location: {harvest_backup.__file__}')" || echo "Failed to import harvest_backup"
             echo ""
             echo "### Directory Structure"
-            find . -type f -name "*.py" | head -20 || echo "Failed to list files"
+            find . -type f -name "*.py" 2>/dev/null | head -20 || echo "Failed to list files"
           } > debug-env-info.txt
 
           # Also add to step summary for visibility

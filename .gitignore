@@ -44,7 +44,7 @@ htmlcov/
 .hypothesis/
 
 # Backup output
-backup/
+/backup/
 
 # Environment variables
 .env
