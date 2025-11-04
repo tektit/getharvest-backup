@@ -1,0 +1,207 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  test-build-docker:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate version
+        id: version
+        run: |
+          COMMIT_COUNT=$(git rev-list --count --all)
+          VERSION="1.${COMMIT_COUNT}.0"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Calculated version: ${VERSION}"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Update version files
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Update pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
+          # Update __init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/harvest_backup/__init__.py
+          echo "Updated version to ${VERSION}"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint with flake8
+        run: |
+          uv run flake8 src/harvest_backup/
+
+      - name: Check code formatting with black
+        run: |
+          uv run black --check src/harvest_backup/
+
+      - name: Test import
+        run: |
+          uv run python -c "import harvest_backup; print('Import successful')"
+
+      - name: Test CLI help
+        run: |
+          uv run harvest-backup --help
+
+      - name: Run all tests (unit and integration)
+        run: |
+          uv run pytest -v
+
+      - name: Run mock backup integration test
+        run: |
+          uv run python tests/run_mock_backup.py --output ./test_backup_output
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Upload version files
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-files
+          path: |
+            pyproject.toml
+            src/harvest_backup/__init__.py
+
+      - name: Create environment info on failure
+        if: failure()
+        run: |
+          {
+            echo "## Environment Info"
+            echo ""
+            echo "### Python Version"
+            uv run python --version || echo "Failed to get Python version"
+            echo ""
+            echo "### uv Version"
+            uv --version || echo "Failed to get uv version"
+            echo ""
+            echo "### Installed Packages"
+            uv pip list || echo "Failed to list packages"
+            echo ""
+            echo "### Python Path"
+            uv run python -c "import sys; print('\n'.join(sys.path))" || echo "Failed to get Python path"
+            echo ""
+            echo "### Package Installation Check"
+            uv run python -c "import harvest_backup; print(f'harvest_backup location: {harvest_backup.__file__}')" || echo "Failed to import harvest_backup"
+            echo ""
+            echo "### Directory Structure"
+            find . -type f -name "*.py" 2>/dev/null | head -20 || echo "Failed to list files"
+          } > debug-env-info.txt
+
+          # Also add to step summary for visibility
+          cat debug-env-info.txt >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload workspace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-workspace
+          retention-days: 7
+          path: .
+          if-no-files-found: ignore
+
+  docker-release:
+    name: Docker Release
+    runs-on: ubuntu-latest
+    needs: test-build-docker
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download version files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+          path: .
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.test-build-docker.outputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # PyPI Release disabled for now
+  # pypi-release:
+  #   name: PyPI Release
+  #   runs-on: ubuntu-latest
+  #   needs: test-build-docker
+  #   if: github.ref == 'refs/heads/main'
+  #   permissions:
+  #     contents: write
+  #     id-token: write
+  #
+  #   steps:
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v5
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         password: ${{ secrets.PYPI_API_TOKEN }}
