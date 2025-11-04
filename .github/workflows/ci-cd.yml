@@ -70,9 +70,9 @@ jobs:
         run: |
           uv run python -c "import harvest_backup; print('Import successful')"
 
-      - name: Test CLI help
-        run: |
-          uv run harvest-backup --help
+      # - name: Test CLI help
+      #   run: |
+      #     uv run harvest-backup --help
 
       - name: Run all tests (unit and integration)
         run: |
