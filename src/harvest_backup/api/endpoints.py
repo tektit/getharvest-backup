@@ -1,7 +1,6 @@
 """Endpoint definitions for Harvest API v2."""
 
 from dataclasses import dataclass
-from typing import Literal
 
 
 @dataclass
