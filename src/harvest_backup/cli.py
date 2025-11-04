@@ -17,7 +17,7 @@ logging.basicConfig(
     level=logging.WARNING,
     format="[%(asctime)s] %(levelname)-8s %(message)s",
     datefmt="%H:%M:%S",
-    stream=sys.stdout
+    stream=sys.stdout,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,17 +67,19 @@ def main(pat: str, output: Path, user_agent: str, verbose: bool, debug: bool, qu
     Backs up all data from all Harvest accounts using the Harvest API v2.
 
     Version: {version}
-    """.format(version=__version__)
+    """.format(
+        version=__version__
+    )
     # Set logging level based on flags
     # Default: Only show overview (INFO level)
     # -v: Show per-request details (VERBOSE level)
     # -d/--debug: Include -v and add DEBUG level
     # -q: Only errors (WARNING and above)
-    
+
     # Suppress low-level httpx/httpcore debug logs (they're too verbose)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    
+
     if quiet:
         logging.getLogger().setLevel(logging.WARNING)
     elif debug:

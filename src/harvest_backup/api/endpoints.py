@@ -61,7 +61,9 @@ ENDPOINTS: dict[str, Endpoint] = {
         # Format: https://{subdomain}.harvestapp.com/client/invoices/{client_key}.pdf
         # The client_key is available in the invoice JSON data
     ),
-    "invoice_item_categories": Endpoint(path="/v2/invoice_item_categories", name="invoice_item_categories"),
+    "invoice_item_categories": Endpoint(
+        path="/v2/invoice_item_categories", name="invoice_item_categories"
+    ),
     "estimates": Endpoint(
         path="/v2/estimates",
         name="estimates",
@@ -69,7 +71,9 @@ ENDPOINTS: dict[str, Endpoint] = {
         # Format: https://{subdomain}.harvestapp.com/client/estimates/{client_key}.pdf
         # The client_key is available in the estimate JSON data
     ),
-    "estimate_item_categories": Endpoint(path="/v2/estimate_item_categories", name="estimate_item_categories"),
+    "estimate_item_categories": Endpoint(
+        path="/v2/estimate_item_categories", name="estimate_item_categories"
+    ),
     "roles": Endpoint(path="/v2/roles", name="roles"),
     "company": Endpoint(
         path="/v2/company",

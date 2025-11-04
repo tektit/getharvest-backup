@@ -29,4 +29,3 @@ class AccountsResponse(BaseModel):
 
     user: User
     accounts: list[Account]
-

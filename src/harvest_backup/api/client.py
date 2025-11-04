@@ -39,7 +39,9 @@ class RateLimiter:
     """Rate limiter for API requests."""
 
     def __init__(
-        self, max_requests: int = DEFAULT_RATE_LIMIT_REQUESTS, time_window: float = DEFAULT_RATE_LIMIT_WINDOW
+        self,
+        max_requests: int = DEFAULT_RATE_LIMIT_REQUESTS,
+        time_window: float = DEFAULT_RATE_LIMIT_WINDOW,
     ) -> None:
         """Initialize rate limiter.
 
@@ -157,7 +159,9 @@ class HarvestAPIClient:
         try:
             data = response.json()
             if isinstance(data, dict):
-                error_msg = self._extract_error_from_dict(data, ["message", "error", "error_description", "detail"])
+                error_msg = self._extract_error_from_dict(
+                    data, ["message", "error", "error_description", "detail"]
+                )
                 if error_msg:
                     return error_msg
         except (json.JSONDecodeError, ValueError):
@@ -374,7 +378,9 @@ class HarvestAPIClient:
 
         while True:
             request_params = {**params, "page": page, "per_page": MAX_PAGINATION_PER_PAGE}
-            response = await self._request("GET", f"{self.BASE_URL}{endpoint}", account_id, request_params)
+            response = await self._request(
+                "GET", f"{self.BASE_URL}{endpoint}", account_id, request_params
+            )
             data = response.json()
 
             items = self._extract_items_from_response(data)
@@ -391,7 +397,9 @@ class HarvestAPIClient:
             else:
                 break
 
-    async def get(self, endpoint: str, account_id: int | None = None, params: dict | None = None) -> dict:
+    async def get(
+        self, endpoint: str, account_id: int | None = None, params: dict | None = None
+    ) -> dict:
         """GET request to API endpoint.
 
         Args:
@@ -460,9 +468,8 @@ class HarvestAPIClient:
         ) as no_auth_client:
             response = await no_auth_client.get(url)
             response.raise_for_status()
-            
+
             # Log successful request at VERBOSE level
             logger.verbose(f"GET {url} OK")
-            
-            return response.content
 
+            return response.content

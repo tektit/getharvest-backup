@@ -31,7 +31,9 @@ def _extract_subdomain_from_data(company_data: dict) -> str:
         # Extract from https://{subdomain}.harvestapp.com
         return base_uri.replace("https://", "").replace(HARVEST_DOMAIN_SUFFIX, "")
 
-    raise ValueError("Could not extract subdomain from company data (missing full_domain and base_uri)")
+    raise ValueError(
+        "Could not extract subdomain from company data (missing full_domain and base_uri)"
+    )
 
 
 async def discover_accounts(client: HarvestAPIClient) -> list[Account]:
@@ -49,7 +51,9 @@ async def discover_accounts(client: HarvestAPIClient) -> list[Account]:
     accounts_response = AccountsResponse(**response_data)
 
     # Filter to only Harvest accounts
-    harvest_accounts = [account for account in accounts_response.accounts if account.product == "harvest"]
+    harvest_accounts = [
+        account for account in accounts_response.accounts if account.product == "harvest"
+    ]
 
     logger.info(f"Found {len(harvest_accounts)} Harvest account(s)")
     for account in harvest_accounts:
@@ -59,4 +63,3 @@ async def discover_accounts(client: HarvestAPIClient) -> list[Account]:
         logger.debug(f"Fetched company data for account {account.id}: {account.subdomain}")
 
     return harvest_accounts
-

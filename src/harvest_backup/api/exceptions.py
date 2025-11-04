@@ -16,4 +16,3 @@ class HarvestAuthenticationError(Exception):
         self.response_body = response_body
         error_type = "Unauthorized" if status_code == 401 else "Forbidden"
         super().__init__(f"{error_type} ({status_code}): {message}")
-
