@@ -2,32 +2,29 @@
 
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
 
 import click
-from rich.console import Console
-from rich.logging import RichHandler
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from harvest_backup.api.client import HarvestAPIClient
+from harvest_backup import __version__
+from harvest_backup.api.client import HarvestAPIClient, VERBOSE
+from harvest_backup.api.exceptions import HarvestAuthenticationError
 from harvest_backup.backup.executor import BackupExecutor
 from harvest_backup.backup.writer import BackupWriter
 
-console = Console()
-
-# Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)],
+    level=logging.WARNING,
+    format="[%(asctime)s] %(levelname)-8s %(message)s",
+    datefmt="%H:%M:%S",
+    stream=sys.stdout
 )
+
 logger = logging.getLogger(__name__)
 
 
-@click.command()
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(version=__version__, prog_name="harvest-backup")
 @click.option(
     "--pat",
     envvar="HARVEST_PAT",
@@ -43,59 +40,85 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--user-agent",
-    default="HarvestBackupTool/0.1.0",
+    default=f"HarvestBackupTool/{__version__}",
     help="User-Agent header value",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Don't actually write files, just show what would be done",
 )
 @click.option(
     "--verbose",
     "-v",
     is_flag=True,
-    help="Enable verbose logging",
+    help="Show per-request details (VERBOSE level)",
 )
-def main(pat: str, output: Path, user_agent: str, dry_run: bool, verbose: bool) -> None:
+@click.option(
+    "--debug",
+    "-d",
+    is_flag=True,
+    help="Show debug information (includes verbose + DEBUG level)",
+)
+@click.option(
+    "--quiet",
+    "-q",
+    is_flag=True,
+    help="Show only errors (WARNING and above)",
+)
+def main(pat: str, output: Path, user_agent: str, verbose: bool, debug: bool, quiet: bool) -> None:
     """Backup tool for Harvest Time Tracking data.
 
     Backs up all data from all Harvest accounts using the Harvest API v2.
-    """
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
 
-    if dry_run:
-        console.print("[yellow]DRY RUN MODE - No files will be written[/yellow]")
+    Version: {version}
+    """.format(version=__version__)
+    # Set logging level based on flags
+    # Default: Only show overview (INFO level)
+    # -v: Show per-request details (VERBOSE level)
+    # -d/--debug: Include -v and add DEBUG level
+    # -q: Only errors (WARNING and above)
+    
+    # Suppress low-level httpx/httpcore debug logs (they're too verbose)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    
+    if quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+    elif debug:
+        # Debug includes verbose (VERBOSE + DEBUG)
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif verbose:
+        # Verbose shows per-request details (VERBOSE level)
+        logging.getLogger().setLevel(VERBOSE)
+    else:
+        # Default: INFO level (overview INFO will show, but VERBOSE won't)
+        logging.getLogger().setLevel(logging.INFO)
 
     async def run_backup() -> None:
         """Run the backup process."""
+        client = HarvestAPIClient(pat, user_agent=user_agent)
         try:
-            async with HarvestAPIClient(pat, user_agent=user_agent) as client:
-                writer = BackupWriter(output)
-                executor = BackupExecutor(client, writer, dry_run=dry_run)
+            writer = BackupWriter(output)
+            executor = BackupExecutor(client, writer)
 
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task("Backing up Harvest accounts...", total=None)
-                    await executor.backup_all()
-                    progress.update(task, completed=True)
+            # Run backup
+            await executor.backup_all()
 
-                console.print("[green]✓ Backup completed successfully[/green]")
+            logger.info("✓ Backup completed successfully")
         except KeyboardInterrupt:
-            console.print("\n[yellow]Backup interrupted by user[/yellow]")
+            logger.warning("Backup interrupted by user")
+            sys.exit(1)
+        except HarvestAuthenticationError as e:
+            logger.error(f"✗ Authentication failed: {e}")
+            if e.response_body:
+                logger.error(f"Response details: {e.response_body}")
+            logger.error("Please check your Personal Access Token (PAT) and try again.")
             sys.exit(1)
         except Exception as e:
-            console.print(f"[red]✗ Backup failed: {e}[/red]", style="bold")
+            logger.error(f"✗ Backup failed: {e}")
             logger.exception("Backup failed")
             sys.exit(1)
+        finally:
+            await client.close()
 
     asyncio.run(run_backup())
 
 
 if __name__ == "__main__":
     main()
-

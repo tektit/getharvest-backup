@@ -4,35 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "getharvest-backup"
-version = "0.1.0"
+version = "0.0.0"
 description = "Backup tool for Harvest Time Tracking data"
 requires-python = ">=3.13"
 readme = "README.md"
-license = {text = "Apache-2.0"}
-authors = [
-    {name = "Harvest Backup Tool"}
-]
+license = { text = "Apache-2.0" }
+authors = [{ name = "Harvest Backup Tool" }]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
     "Topic :: Utilities",
 ]
-dependencies = [
-    "httpx>=0.25.0",
-    "click>=8.1.0",
-    "pydantic>=2.0.0",
-    "rich>=13.0.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-mock>=3.11.0",
-]
+dependencies = ["httpx>=0.25.0", "click>=8.1.0", "pydantic>=2.0.0"]
 
 [project.scripts]
 harvest-backup = "harvest_backup.cli:main"
@@ -48,3 +34,11 @@ asyncio_mode = "auto"
 line-length = 100
 target-version = ['py313']
 
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.0",
+    "flake8>=6.0.0",
+    "black>=23.0.0",
+]

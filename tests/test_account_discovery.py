@@ -13,6 +13,8 @@ async def test_discover_accounts() -> None:
     """Test account discovery filters Harvest accounts."""
     mock_client = MagicMock()
     mock_client.get = AsyncMock(return_value=SAMPLE_ACCOUNTS_RESPONSE)
+    # Mock get_company for each account
+    mock_client.get_company = AsyncMock(return_value={"full_domain": "testcompany.harvestapp.com"})
 
     accounts = await discover_accounts(mock_client)
 
@@ -23,6 +25,11 @@ async def test_discover_accounts() -> None:
     assert accounts[0].name == "Test Company"
     assert accounts[1].id == 67890
     assert accounts[1].name == "Another Company"
+    # Check that company_data and subdomain were populated
+    assert accounts[0].company_data is not None
+    assert accounts[0].subdomain == "testcompany"
+    assert accounts[1].company_data is not None
+    assert accounts[1].subdomain == "testcompany"
 
 
 @pytest.mark.asyncio
@@ -35,6 +42,7 @@ async def test_discover_accounts_no_harvest() -> None:
 
     mock_client = MagicMock()
     mock_client.get = AsyncMock(return_value=response)
+    # No need to mock get_company since no harvest accounts will be found
 
     accounts = await discover_accounts(mock_client)
 

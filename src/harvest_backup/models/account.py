@@ -2,29 +2,31 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Account(BaseModel):
     """Harvest account model."""
 
-    id: int = Field(..., description="Account ID")
-    name: str = Field(..., description="Account name")
-    product: Literal["harvest", "forecast"] = Field(..., description="Product type")
+    id: int
+    name: str
+    product: Literal["harvest", "forecast"]
+    company_data: dict | None = None  # Company data fetched from /v2/company endpoint
+    subdomain: str | None = None  # Account subdomain extracted from company_data
 
 
 class User(BaseModel):
     """User model from accounts API."""
 
-    id: int = Field(..., description="User ID")
-    first_name: str = Field(..., description="First name")
-    last_name: str = Field(..., description="Last name")
-    email: str = Field(..., description="Email address")
+    id: int
+    first_name: str
+    last_name: str
+    email: str
 
 
 class AccountsResponse(BaseModel):
     """Response from the accounts API endpoint."""
 
-    user: User = Field(..., description="Current user")
-    accounts: list[Account] = Field(..., description="List of accounts")
+    user: User
+    accounts: list[Account]
 

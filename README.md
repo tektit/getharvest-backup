@@ -19,7 +19,7 @@ Backup tool for Harvest Time Tracking data using the Harvest API v2. This tool a
   - Estimates (with PDF downloads) and estimate item categories
   - Roles
   - Company settings
-- **Incremental Backup**: Binary artifacts (PDFs) are only downloaded if they don't already exist or have changed
+- **Incremental Backup**: Binary artifacts (PDFs) can be downloaded incrementally
 - **Rate Limiting**: Automatically handles Harvest API rate limits (100 requests per 15 seconds)
 - **Error Handling**: Robust error handling with retries and exponential backoff
 - **Dry Run Mode**: Test without actually writing files
@@ -34,16 +34,39 @@ Backup tool for Harvest Time Tracking data using the Harvest API v2. This tool a
 
 ### From Source
 
+First, install [uv](https://github.com/astral-sh/uv) if you haven't already:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then install the project:
+
 ```bash
 git clone https://github.com/tektit/getharvest-backup.git
 cd getharvest-backup
-pip install -r requirements.txt
+uv sync --no-dev
 ```
+
+Note: By default, `uv sync` includes dev dependencies. Use `--no-dev` to install only runtime dependencies.
 
 ### Using Docker
 
 ```bash
 docker build -t getharvest-backup .
+```
+
+Or use the pre-built image from GitHub Packages:
+
+```bash
+docker pull ghcr.io/tektit/getharvest-backup:latest
+```
+
+```bash
+docker run --rm -t \
+  -e HARVEST_PAT=your_personal_access_token \
+  -v $(pwd)/backup:/backup \
+  ghcr.io/tektit/getharvest-backup:latest
 ```
 
 ## Usage
@@ -53,41 +76,47 @@ docker build -t getharvest-backup .
 ```bash
 # Using environment variable for PAT
 export HARVEST_PAT=your_personal_access_token
-python -m harvest_backup.cli --output ./backup
+uv run harvest-backup --output ./backup
 
 # Or specify PAT directly
-python -m harvest_backup.cli --pat your_personal_access_token --output ./backup
+uv run harvest-backup --pat your_personal_access_token --output ./backup
 
 # Dry run mode (test without writing files)
-python -m harvest_backup.cli --pat your_pat --dry-run
+uv run harvest-backup --pat your_pat --dry-run
 
 # Verbose logging
-python -m harvest_backup.cli --pat your_pat --verbose
+uv run harvest-backup --pat your_pat --verbose
 ```
 
 ### Docker
 
 ```bash
-# Build and run
+# Build the image
 docker build -t getharvest-backup .
-docker run --rm \
+
+# Run the backup (one-shot job)
+# Use -t for interactive use (full terminal width)
+docker run --rm -t \
   -e HARVEST_PAT=your_personal_access_token \
   -v $(pwd)/backup:/backup \
-  getharvest-backup \
-  --output /backup
+  getharvest-backup
 ```
 
-### Docker Compose
+You can also use a `.env` file for the PAT:
 
 ```bash
-# Set PAT in environment or .env file
-export HARVEST_PAT=your_personal_access_token
+# Create .env file with your PAT
+echo "HARVEST_PAT=your_personal_access_token" > .env
 
-# Run backup
-docker-compose up
+# Run with env file
+# Use -t for interactive use (full terminal width)
+docker run --rm -t \
+  --env-file .env \
+  -v $(pwd)/backup:/backup \
+  getharvest-backup
 ```
 
-The backup will be stored in the `./backup` directory by default.
+The backup will be stored in `/backup` inside the container (mapped to `./backup` on your host by default).
 
 ## Backup Output Structure
 
@@ -96,8 +125,8 @@ backup/
 ├── accounts.json                    # List of all discovered accounts
 ├── harvest_account_12345/
 │   ├── clients/
-│   │   ├── list.json               # All clients
-│   │   └── 123.json                # Individual client detail
+│   │   ├── list.json               # All clients (source of truth - contains full objects)
+│   │   └── 123.json                # Individual client (synthetically created from list.json)
 │   ├── contacts/
 │   │   ├── list.json               # All contacts
 │   │   └── 456.json                # Individual contact detail
@@ -132,17 +161,15 @@ backup/
 │   │   └── 300.json
 │   ├── invoices/
 │   │   ├── list.json
-│   │   ├── 300.json
-│   │   └── artifacts/
-│   │       └── 300.pdf            # Invoice PDF (incremental)
+│   │   └── 300.json
+│   │   # Note: PDFs not available via API - client_key is in JSON for web access
 │   ├── invoice_item_categories/
 │   │   ├── list.json
 │   │   └── 400.json
 │   ├── estimates/
 │   │   ├── list.json
-│   │   ├── 400.json
-│   │   └── artifacts/
-│   │       └── 400.pdf            # Estimate PDF (incremental)
+│   │   └── 400.json
+│   │   # Note: PDFs not available via API - client_key is in JSON for web access
 │   ├── estimate_item_categories/
 │   │   ├── list.json
 │   │   └── 500.json
@@ -155,14 +182,20 @@ backup/
     └── ...
 ```
 
+### Data Structure Notes
+
+- **`list.json`**: Contains all items from the API list endpoint. This is the **source of truth** and contains full object data (same schema as detail endpoints).
+- **Individual `{id}.json` files**: Created synthetically from `list.json` for convenience and direct access. No additional API calls are made.
+- **For restoration**: Use the data from `list.json` or individual files (they contain the same data). The Harvest API uses POST endpoints with the object data to create/restore items.
+
 ## Incremental Backup
 
-The tool uses incremental backup for binary artifacts (PDFs):
+The tool uses incremental backup for binary artifacts:
 
 - **JSON files**: Always written (overwritten) to ensure data is up-to-date
-- **PDF files**: Only downloaded if:
-  - The file doesn't exist, or
-  - The file exists but has a different hash (content changed)
+- **Binary files**: Only downloaded if they don't already exist or have changed (currently not applicable as PDFs are not available via API)
+
+**Note on PDFs**: The Harvest API does not provide PDF downloads via the `/v2/invoices/{id}.pdf` or `/v2/estimates/{id}.pdf` endpoints. These endpoints return JSON identical to the detail endpoints. PDFs can be accessed via the public web URL using the `client_key` field from the invoice/estimate JSON: `https://{subdomain}.harvestapp.com/client/invoices/{client_key}.pdf`
 
 Artifact manifests are stored in `.artifacts_manifest.json` in the backup root directory.
 
@@ -189,10 +222,10 @@ The tool backs up all Harvest API v2 data endpoints as defined in the official O
   - `/v2/expenses` - All expenses
   - `/v2/expense_categories` - All expense categories
 - **Invoices**: 
-  - `/v2/invoices` - All invoices with PDF downloads
+  - `/v2/invoices` - All invoices (note: PDFs not available via API)
   - `/v2/invoice_item_categories` - All invoice item categories
 - **Estimates**: 
-  - `/v2/estimates` - All estimates with PDF downloads
+  - `/v2/estimates` - All estimates (note: PDFs not available via API)
   - `/v2/estimate_item_categories` - All estimate item categories
 - **Roles**: `/v2/roles` - All roles
 - **Company**: `/v2/company` - Company settings (single resource)
@@ -215,28 +248,74 @@ The tool automatically handles Harvest API rate limits and pagination:
 
 ## Testing
 
-The tool includes comprehensive test coverage (22 tests) covering:
+The tool includes comprehensive test coverage covering:
 - API client functionality (rate limiting, pagination, retries)
 - Account discovery
 - Backup executor
 - File writer with incremental backup
 - Error handling
+- Integration tests with full backup flow
+
+### Unit Tests
 
 Run tests with pytest:
 
 ```bash
 # Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Install package in editable mode
-pip install -e .
+uv sync --dev
 
 # Run tests
-pytest
+uv run pytest
 
 # Run with coverage
-pytest --cov=harvest_backup --cov-report=html
+uv run pytest --cov=harvest_backup --cov-report=html
 ```
+
+### Local Testing with Mock Data
+
+You can test the backup tool locally without a real Harvest API token using mock data:
+
+```bash
+# Run backup with mock data (no API token needed)
+python tests/run_mock_backup.py --output ./test_backup
+
+# Run with verbose logging to see all API calls
+python tests/run_mock_backup.py --output ./test_backup --verbose
+
+# Run with debug logging
+python tests/run_mock_backup.py --output ./test_backup --debug
+
+# Use any CLI option
+python tests/run_mock_backup.py --output ./test_backup --quiet
+```
+
+The mock backup script:
+- Uses sample test data for all endpoints (clients, projects, invoices, etc.)
+- Includes PDF test data for invoices and estimates
+- Supports all CLI features (logging, progress indicators, error handling)
+- Produces the same output structure as a real backup
+- Shows VERBOSE logs when using `--verbose` flag
+
+Example output:
+```
+[20:20:13] INFO     Starting backup of all Harvest accounts...
+[20:20:13] INFO     Discovering Harvest accounts...
+[20:20:13] INFO     Found 2 Harvest account(s)
+[20:20:13] INFO       - Account 12345: Test Company
+[20:20:13] INFO       - Account 67890: Another Company
+[20:20:13] INFO     Backing up account 12345 (Test Company)...
+[20:20:13] INFO     Completed backup for account 12345
+[20:20:13] INFO     Backing up account 67890 (Another Company)...
+[20:20:13] INFO     Completed backup for account 67890
+[20:20:13] INFO     Backup completed successfully
+[20:20:13] INFO     ✓ Backup completed successfully
+```
+
+This is useful for:
+- Testing the backup tool without API access
+- Verifying output structure and file organization
+- Debugging backup logic locally
+- Demonstrating the tool's functionality
 
 ## Configuration
 
@@ -249,7 +328,6 @@ pytest --cov=harvest_backup --cov-report=html
 - `--pat`: Personal Access Token (overrides `HARVEST_PAT` env var)
 - `--output`, `-o`: Output directory (default: `./backup`)
 - `--user-agent`: User-Agent header value (default: `HarvestBackupTool/0.1.0`)
-- `--dry-run`: Don't write files, just show what would be done
 - `--verbose`, `-v`: Enable verbose logging
 
 ## Error Handling

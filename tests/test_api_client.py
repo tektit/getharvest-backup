@@ -130,6 +130,7 @@ async def test_api_client_get_binary() -> None:
     with patch("httpx.AsyncClient") as mock_client_class:
         mock_response = MagicMock()
         mock_response.content = b"PDF content here"
+        mock_response.headers = {"content-type": "application/pdf"}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = AsyncMock()
@@ -137,7 +138,8 @@ async def test_api_client_get_binary() -> None:
         mock_client_class.return_value = mock_client
 
         async with HarvestAPIClient("test_token") as client:
-            result = await client.get_binary("/v2/invoices/123.pdf", account_id=12345)
+            content, content_type = await client.get_binary("/v2/invoices/123.pdf", account_id=12345)
 
-        assert result == b"PDF content here"
+        assert content == b"PDF content here"
+        assert content_type == "application/pdf"
 

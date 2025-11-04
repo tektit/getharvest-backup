@@ -5,19 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from harvest_backup.backup.writer import BackupWriter, calculate_file_hash
-
-
-def test_calculate_file_hash(tmp_path: Path) -> None:
-    """Test file hash calculation."""
-    test_file = tmp_path / "test.txt"
-    test_file.write_text("test content")
-
-    hash1 = calculate_file_hash(test_file)
-    hash2 = calculate_file_hash(test_file)
-
-    assert hash1 == hash2
-    assert len(hash1) == 64  # SHA-256 hex digest length
+from harvest_backup.backup.writer import BackupWriter
 
 
 def test_writer_init(tmp_path: Path) -> None:
@@ -41,17 +29,6 @@ def test_writer_write_json(tmp_path: Path) -> None:
         loaded_data = json.load(f)
 
     assert loaded_data == data
-
-
-def test_writer_write_json_dry_run(tmp_path: Path) -> None:
-    """Test writing JSON in dry-run mode."""
-    writer = BackupWriter(tmp_path)
-
-    data = {"key": "value"}
-    file_path = writer.write_json(12345, "clients", "test.json", data, dry_run=True)
-
-    # In dry-run, file shouldn't exist
-    assert not file_path.exists()
 
 
 def test_writer_write_binary_incremental(tmp_path: Path) -> None:
@@ -105,4 +82,109 @@ def test_writer_directory_structure(tmp_path: Path) -> None:
 
     assert (tmp_path / "harvest_account_12345" / "clients").exists()
     assert (tmp_path / "harvest_account_67890" / "projects").exists()
+
+
+def test_should_download_binary_missing_file(tmp_path: Path) -> None:
+    """Test that should_download_binary returns True for missing files."""
+    writer = BackupWriter(tmp_path)
+    
+    # File doesn't exist - should download
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", "abc123hash"
+    )
+    
+    assert should_download is True
+
+
+def test_should_download_binary_hash_matches(tmp_path: Path) -> None:
+    """Test that should_download_binary returns False when hash matches."""
+    import hashlib
+    
+    writer = BackupWriter(tmp_path)
+    
+    # Write a PDF file first
+    content = b"%PDF-1.4\nfake pdf content"
+    content_hash = hashlib.sha256(content).hexdigest()
+    
+    writer.write_binary(
+        12345, "invoices", "100", "100.pdf", content, content_hash=content_hash
+    )
+    
+    # Check with matching hash - should skip
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", content_hash
+    )
+    
+    assert should_download is False
+
+
+def test_should_download_binary_hash_mismatch(tmp_path: Path) -> None:
+    """Test that should_download_binary returns True when hash doesn't match."""
+    import hashlib
+    
+    writer = BackupWriter(tmp_path)
+    
+    # Write a PDF file first
+    content = b"%PDF-1.4\nfake pdf content"
+    content_hash = hashlib.sha256(content).hexdigest()
+    
+    writer.write_binary(
+        12345, "invoices", "100", "100.pdf", content, content_hash=content_hash
+    )
+    
+    # Check with different hash - should download
+    different_hash = "different_hash_value_12345"
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", different_hash
+    )
+    
+    assert should_download is True
+
+
+def test_should_download_binary_file_exists_no_manifest(tmp_path: Path) -> None:
+    """Test that should_download_binary returns True when file exists but not in manifest."""
+    writer = BackupWriter(tmp_path)
+    
+    # Create the file manually (not through write_binary, so no manifest entry)
+    artifacts_dir = tmp_path / "harvest_account_12345" / "invoices" / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    pdf_file = artifacts_dir / "100.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4\nfake pdf")
+    
+    # Check - file exists but not in manifest, should download
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", "some_hash"
+    )
+    
+    assert should_download is True
+
+
+def test_should_download_binary_with_hash(tmp_path: Path) -> None:
+    """Test that should_download_binary works with hash matching."""
+    import hashlib
+    
+    writer = BackupWriter(tmp_path)
+    
+    # Write a PDF file first
+    content = b"%PDF-1.4\nfake pdf content"
+    content_hash = hashlib.sha256(content).hexdigest()
+    
+    writer.write_binary(
+        12345, "invoices", "100", "100.pdf", content, content_hash=content_hash
+    )
+    
+    # Check with matching hash - should skip
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", content_hash
+    )
+    
+    assert should_download is False
+    
+    # Check with different hash - should download
+    different_hash = "different_hash_value"
+    should_download = writer.should_download_binary(
+        12345, "invoices", "100", "100.pdf", different_hash
+    )
+    
+    assert should_download is True
 

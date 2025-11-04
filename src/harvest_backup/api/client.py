@@ -1,19 +1,46 @@
 """API client for Harvest API v2 with rate limiting and pagination."""
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncIterator
 from time import time
 
 import httpx
 
+from harvest_backup.api.exceptions import HarvestAuthenticationError
+
+# Constants
+DEFAULT_RATE_LIMIT_REQUESTS = 100
+DEFAULT_RATE_LIMIT_WINDOW = 15.0
+DEFAULT_RETRY_DELAY = 1.0
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_TIMEOUT = 30.0
+MAX_PAGINATION_PER_PAGE = 2000
+ERROR_MESSAGE_MAX_LENGTH = 200
+
+# Define VERBOSE log level (between DEBUG and INFO)
+VERBOSE = 15
+logging.addLevelName(VERBOSE, "VERBOSE")
+
+
+def verbose(self, message, *args, **kwargs):
+    """Log a message with severity 'VERBOSE'."""
+    if self.isEnabledFor(VERBOSE):
+        self._log(VERBOSE, message, args, **kwargs)
+
+
+logging.Logger.verbose = verbose
+
 logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    """Rate limiter for API requests (100 requests per 15 seconds)."""
+    """Rate limiter for API requests."""
 
-    def __init__(self, max_requests: int = 100, time_window: float = 15.0) -> None:
+    def __init__(
+        self, max_requests: int = DEFAULT_RATE_LIMIT_REQUESTS, time_window: float = DEFAULT_RATE_LIMIT_WINDOW
+    ) -> None:
         """Initialize rate limiter.
 
         Args:
@@ -56,8 +83,8 @@ class HarvestAPIClient:
         self,
         access_token: str,
         user_agent: str = "HarvestBackupTool/0.1.0",
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_delay: float = DEFAULT_RETRY_DELAY,
     ) -> None:
         """Initialize Harvest API client.
 
@@ -78,7 +105,7 @@ class HarvestAPIClient:
                 "Authorization": f"Bearer {access_token}",
                 "User-Agent": user_agent,
             },
-            timeout=httpx.Timeout(30.0),
+            timeout=httpx.Timeout(DEFAULT_TIMEOUT),
         )
 
     async def __aenter__(self):
@@ -92,6 +119,134 @@ class HarvestAPIClient:
     async def close(self) -> None:
         """Close the HTTP client."""
         await self.client.aclose()
+
+    def _extract_error_from_dict(self, data: dict, keys: list[str]) -> str | None:
+        """Extract error message from dictionary using given keys.
+
+        Args:
+            data: Dictionary to search
+            keys: List of keys to try
+
+        Returns:
+            Error message string or None if not found
+        """
+        for key in keys:
+            if key not in data:
+                continue
+            value = data[key]
+            if isinstance(value, str):
+                return value
+            if isinstance(value, list) and value:
+                return str(value[0])
+            if isinstance(value, dict):
+                # Try nested keys
+                nested_result = self._extract_error_from_dict(value, ["message", "error", "detail"])
+                if nested_result:
+                    return nested_result
+        return None
+
+    def _extract_error_message(self, response: httpx.Response) -> str:
+        """Extract error message from API response.
+
+        Args:
+            response: HTTP response
+
+        Returns:
+            Error message string
+        """
+        try:
+            data = response.json()
+            if isinstance(data, dict):
+                error_msg = self._extract_error_from_dict(data, ["message", "error", "error_description", "detail"])
+                if error_msg:
+                    return error_msg
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Fallback to status text or response text
+        if response.text:
+            return response.text[:ERROR_MESSAGE_MAX_LENGTH]
+        return response.reason_phrase or f"HTTP {response.status_code}"
+
+    def _format_page_info(self, params: dict | None) -> str:
+        """Format pagination info for logging.
+
+        Args:
+            params: Request parameters
+
+        Returns:
+            Formatted page info string
+        """
+        if not params or "page" not in params:
+            return ""
+        page = params.get("page", 1)
+        per_page = params.get("per_page", MAX_PAGINATION_PER_PAGE)
+        page_info = f" page={page}"
+        if per_page != MAX_PAGINATION_PER_PAGE:
+            page_info += f" per_page={per_page}"
+        return page_info
+
+    async def _handle_http_error(
+        self, error: httpx.HTTPStatusError, attempt: int, delay: float
+    ) -> tuple[bool, float]:
+        """Handle HTTP status errors and determine if retry is needed.
+
+        Args:
+            error: HTTP status error
+            attempt: Current attempt number
+            delay: Current delay for retry
+
+        Returns:
+            Tuple of (should_retry, new_delay)
+        """
+        status_code = error.response.status_code
+
+        if status_code == 429:
+            # Rate limit error - wait for Retry-After header or use delay
+            retry_after = error.response.headers.get("Retry-After")
+            wait_time = float(retry_after) if retry_after else delay
+            logger.warning(f"Rate limited (429), waiting {wait_time:.2f} seconds")
+            await asyncio.sleep(wait_time)
+            return True, delay * 2  # Exponential backoff
+
+        if status_code in (401, 403):
+            # Authentication errors - don't retry
+            error_message = self._extract_error_message(error.response)
+            raise HarvestAuthenticationError(
+                error.response.status_code,
+                error_message,
+                response_body=error.response.text,
+            )
+
+        if status_code >= 500:
+            # Server errors - retry
+            if attempt < self.max_retries:
+                logger.warning(f"Server error {status_code}, retrying in {delay:.2f}s")
+                await asyncio.sleep(delay)
+                return True, delay * 2
+            raise
+
+        # Other client errors - don't retry
+        raise
+
+    async def _handle_network_error(
+        self, error: httpx.NetworkError | httpx.TimeoutException, attempt: int, delay: float
+    ) -> tuple[bool, float]:
+        """Handle network errors and determine if retry is needed.
+
+        Args:
+            error: Network or timeout error
+            attempt: Current attempt number
+            delay: Current delay for retry
+
+        Returns:
+            Tuple of (should_retry, new_delay)
+        """
+        if attempt < self.max_retries:
+            logger.warning(f"Network error, retrying in {delay:.2f}s: {error}")
+            await asyncio.sleep(delay)
+            return True, delay * 2
+        raise
 
     async def _request(
         self,
@@ -116,15 +271,12 @@ class HarvestAPIClient:
         Raises:
             httpx.HTTPError: If request fails after retries
         """
-        # Wait for rate limit
         await self.rate_limiter.wait_if_needed()
 
-        # Prepare headers
         headers = kwargs.pop("headers", {})
         if account_id is not None:
             headers["Harvest-Account-Id"] = str(account_id)
 
-        # Prepare request
         request_kwargs = {
             "method": method,
             "url": url,
@@ -133,7 +285,6 @@ class HarvestAPIClient:
             **kwargs,
         }
 
-        # Retry logic with exponential backoff
         delay = self.retry_delay
         last_exception = None
 
@@ -141,48 +292,64 @@ class HarvestAPIClient:
             try:
                 response = await self.client.request(**request_kwargs)
                 response.raise_for_status()
+
+                page_info = self._format_page_info(params)
+                logger.verbose(f"{method} {url}{page_info} OK")
+
                 return response
             except httpx.HTTPStatusError as e:
                 last_exception = e
-                if e.response.status_code == 429:
-                    # Rate limit error - wait for Retry-After header or use delay
-                    retry_after = e.response.headers.get("Retry-After")
-                    if retry_after:
-                        wait_time = float(retry_after)
-                    else:
-                        wait_time = delay
-                    logger.warning(f"Rate limited (429), waiting {wait_time:.2f} seconds")
-                    await asyncio.sleep(wait_time)
-                    delay *= 2  # Exponential backoff
+                should_retry, delay = await self._handle_http_error(e, attempt, delay)
+                if should_retry:
                     continue
-                elif e.response.status_code in (401, 403):
-                    # Authentication errors - don't retry
-                    logger.error(f"Authentication error: {e.response.status_code}")
-                    raise
-                elif e.response.status_code >= 500:
-                    # Server errors - retry
-                    if attempt < self.max_retries:
-                        logger.warning(f"Server error {e.response.status_code}, retrying in {delay:.2f}s")
-                        await asyncio.sleep(delay)
-                        delay *= 2
-                        continue
-                    raise
-                else:
-                    # Other client errors - don't retry
-                    raise
             except (httpx.NetworkError, httpx.TimeoutException) as e:
                 last_exception = e
-                if attempt < self.max_retries:
-                    logger.warning(f"Network error, retrying in {delay:.2f}s: {e}")
-                    await asyncio.sleep(delay)
-                    delay *= 2
+                should_retry, delay = await self._handle_network_error(e, attempt, delay)
+                if should_retry:
                     continue
-                raise
 
-        # If we get here, all retries failed
         if last_exception:
             raise last_exception
         raise httpx.HTTPError("Request failed after retries")
+
+    def _extract_items_from_response(self, data: dict) -> list | dict:
+        """Extract items list from API response.
+
+        Harvest API returns items either directly as a list, or wrapped in a key.
+        This method detects the structure dynamically.
+
+        Args:
+            data: Response data dictionary
+
+        Returns:
+            Items list or single item dict
+        """
+        # If data itself is a list, return it
+        if isinstance(data, list):
+            return data
+
+        # Look for list values in the dictionary (skip metadata fields)
+        metadata_fields = {"page", "per_page", "total_pages", "total_entries", "links", "next_page"}
+        for key, value in data.items():
+            if key not in metadata_fields and isinstance(value, list):
+                return value
+
+        # If no list found, return the whole dict (might be a single item)
+        return data
+
+    def _has_next_page(self, data: dict) -> bool:
+        """Check if response has a next page.
+
+        Args:
+            data: Response data dictionary
+
+        Returns:
+            True if there's a next page
+        """
+        if data.get("next_page") is not None:
+            return True
+        links = data.get("links", {})
+        return isinstance(links, dict) and links.get("next") is not None
 
     async def get_paginated(
         self,
@@ -204,40 +371,13 @@ class HarvestAPIClient:
             params = {}
 
         page = 1
-        per_page = 2000  # Maximum per Harvest API (as per OpenAPI spec)
 
         while True:
-            request_params = {**params, "page": page, "per_page": per_page}
+            request_params = {**params, "page": page, "per_page": MAX_PAGINATION_PER_PAGE}
             response = await self._request("GET", f"{self.BASE_URL}{endpoint}", account_id, request_params)
             data = response.json()
 
-            # Extract items (Harvest API returns items directly or in a key)
-            items = data
-            if isinstance(data, dict):
-                # Some endpoints wrap items in a key (e.g., "clients", "time_entries")
-                # Try common keys, or use the whole dict if it's the item itself
-                # Check all possible response keys from the API
-                for key in [
-                    "clients",
-                    "contacts",
-                    "time_entries",
-                    "projects",
-                    "tasks",
-                    "users",
-                    "expenses",
-                    "invoices",
-                    "estimates",
-                    "estimate_item_categories",
-                    "invoice_item_categories",
-                    "expense_categories",
-                    "roles",
-                    "company",
-                    "user_assignments",
-                    "task_assignments",
-                ]:
-                    if key in data and isinstance(data[key], list):
-                        items = data[key]
-                        break
+            items = self._extract_items_from_response(data)
 
             if isinstance(items, list):
                 for item in items:
@@ -246,14 +386,7 @@ class HarvestAPIClient:
                 # Single item response
                 yield items
 
-            # Check for next page
-            # Harvest API provides both next_page (number) and links.next (URL)
-            # Check both for compatibility
-            next_page = data.get("next_page")
-            links = data.get("links", {})
-            links_next = isinstance(links, dict) and links.get("next")
-
-            if next_page is not None or links_next:
+            if self._has_next_page(data):
                 page += 1
             else:
                 break
@@ -278,7 +411,9 @@ class HarvestAPIClient:
         response = await self._request("GET", url, account_id, params)
         return response.json()
 
-    async def get_binary(self, endpoint: str, account_id: int, params: dict | None = None) -> bytes:
+    async def get_binary(
+        self, endpoint: str, account_id: int, params: dict | None = None
+    ) -> tuple[bytes, str | None]:
         """GET request for binary data (e.g., PDFs).
 
         Args:
@@ -287,9 +422,47 @@ class HarvestAPIClient:
             params: Query parameters
 
         Returns:
-            Binary response content
+            Tuple of (binary response content, content_type)
         """
         url = f"{self.BASE_URL}{endpoint}"
         response = await self._request("GET", url, account_id, params)
-        return response.content
+        content_type = response.headers.get("content-type", "").lower()
+        return response.content, content_type
+
+    async def get_company(self, account_id: int) -> dict:
+        """Get company data for an account.
+
+        Args:
+            account_id: Harvest account ID
+
+        Returns:
+            Company data dictionary (includes full_domain and base_uri)
+        """
+        return await self.get("/v2/company", account_id)
+
+    async def download_client_link(self, url: str) -> bytes:
+        """Download a client link (public URL, no authentication required).
+
+        Args:
+            url: Full URL to download
+
+        Returns:
+            Binary content
+
+        Raises:
+            httpx.HTTPStatusError: If the request fails
+        """
+        # Client links are public and don't require authentication
+        async with httpx.AsyncClient(
+            headers={"User-Agent": self.user_agent},
+            timeout=httpx.Timeout(DEFAULT_TIMEOUT),
+            follow_redirects=True,
+        ) as no_auth_client:
+            response = await no_auth_client.get(url)
+            response.raise_for_status()
+            
+            # Log successful request at VERBOSE level
+            logger.verbose(f"GET {url} OK")
+            
+            return response.content
 
