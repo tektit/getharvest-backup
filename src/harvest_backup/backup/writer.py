@@ -47,7 +47,9 @@ class BackupWriter:
     def _save_artifacts_manifest(self) -> None:
         """Save artifacts manifest to disk."""
         try:
-            with NamedTemporaryFile(mode="w", dir=self.output_dir, delete=False, suffix=".json") as f:
+            with NamedTemporaryFile(
+                mode="w", dir=self.output_dir, delete=False, suffix=".json"
+            ) as f:
                 json.dump(self.artifacts_manifest, f, indent=2)
                 temp_path = Path(f.name)
 
@@ -84,7 +86,6 @@ class BackupWriter:
         account_manifest = self.artifacts_manifest.get(str(account_id), {})
         manifest_key = self._get_manifest_key(endpoint_name, artifact_id)
         return account_manifest.get(manifest_key)
-
 
     def write_json(
         self,
@@ -185,7 +186,9 @@ class BackupWriter:
 
             # Atomic write
             temp_path.replace(file_path)
-            logger.debug(f"Saved PDF: {file_path} (JSON hash: {content_hash[:HASH_DISPLAY_LENGTH]}...)")
+            logger.debug(
+                f"Saved PDF: {file_path} (JSON hash: {content_hash[:HASH_DISPLAY_LENGTH]}...)"
+            )
 
             # Update manifest
             if str(account_id) not in self.artifacts_manifest:
@@ -229,7 +232,7 @@ class BackupWriter:
         account_dir = self.output_dir / f"harvest_account_{account_id}" / endpoint_name
         artifacts_dir = account_dir / "artifacts"
         file_path = artifacts_dir / filename
-        
+
         # If file doesn't exist on disk, we definitely need to download it
         if not file_path.exists():
             return True
@@ -257,7 +260,9 @@ class BackupWriter:
         file_path = self.output_dir / "accounts.json"
 
         try:
-            with NamedTemporaryFile(mode="w", dir=self.output_dir, delete=False, suffix=".json") as f:
+            with NamedTemporaryFile(
+                mode="w", dir=self.output_dir, delete=False, suffix=".json"
+            ) as f:
                 json.dump({"accounts": accounts}, f, indent=2, ensure_ascii=False)
                 temp_path = Path(f.name)
 
@@ -268,4 +273,3 @@ class BackupWriter:
             raise
 
         return file_path
-

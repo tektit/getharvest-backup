@@ -48,7 +48,9 @@ class BackupExecutor:
             raise ValueError("No Harvest accounts found")
 
         # Write accounts list
-        accounts_data = [{"id": acc.id, "name": acc.name, "product": acc.product} for acc in accounts]
+        accounts_data = [
+            {"id": acc.id, "name": acc.name, "product": acc.product} for acc in accounts
+        ]
         self.writer.write_accounts_list(accounts_data)
 
         # Backup each account
@@ -75,14 +77,14 @@ class BackupExecutor:
             except HarvestAuthenticationError:
                 raise  # Propagate authentication errors immediately
             except Exception as e:
-                logger.error(f"Error backing up {endpoint.name} for account {account.id}: {e}", exc_info=True)
+                logger.error(
+                    f"Error backing up {endpoint.name} for account {account.id}: {e}", exc_info=True
+                )
                 continue
 
         logger.info(f"Completed backup for account {account.id}")
 
-    async def _backup_single_resource_endpoint(
-        self, account: Account, endpoint: Endpoint
-    ) -> None:
+    async def _backup_single_resource_endpoint(self, account: Account, endpoint: Endpoint) -> None:
         """Back up a single-resource endpoint (like /v2/company).
 
         Args:
@@ -278,9 +280,7 @@ class BackupExecutor:
         """
         return f"https://{subdomain}{HARVEST_DOMAIN_SUFFIX}/client/{endpoint_name}/{client_key}.pdf"
 
-    async def _backup_pdfs(
-        self, account: Account, endpoint_name: str, items: list[dict]
-    ) -> None:
+    async def _backup_pdfs(self, account: Account, endpoint_name: str, items: list[dict]) -> None:
         """Download PDFs for invoices or estimates using client links.
 
         Args:
@@ -315,7 +315,9 @@ class BackupExecutor:
                     continue
 
                 # Download PDF
-                client_url = self._build_client_link_url(account.subdomain, endpoint_name, client_key)
+                client_url = self._build_client_link_url(
+                    account.subdomain, endpoint_name, client_key
+                )
                 pdf_content = await self.client.download_client_link(client_url)
 
                 # Write PDF file (write_binary will handle incremental backup logic)
@@ -329,9 +331,10 @@ class BackupExecutor:
                 )
 
                 if result is not None:
-                    logger.verbose(f"Downloaded PDF: {endpoint_name} {item_id} ({len(pdf_content)} bytes)")
+                    logger.verbose(
+                        f"Downloaded PDF: {endpoint_name} {item_id} ({len(pdf_content)} bytes)"
+                    )
 
             except Exception as e:
                 logger.warning(f"Failed to download PDF for {endpoint_name} {item_id}: {e}")
                 continue
-
