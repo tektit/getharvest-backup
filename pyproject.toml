@@ -8,12 +8,11 @@ version = "0.0.0"
 description = "Backup tool for Harvest Time Tracking data"
 requires-python = ">=3.13"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 authors = [{ name = "Harvest Backup Tool" }]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
     "Topic :: Utilities",
