@@ -27,7 +27,7 @@ COPY --from=builder /app/.venv /app/.venv
 # Copy source code (package is installed in editable mode)
 COPY --from=builder /app/src /app/src
 
-WORKDIR /backup
+WORKDIR /
 
 ENV PATH="/app/.venv/bin:$PATH"
 
