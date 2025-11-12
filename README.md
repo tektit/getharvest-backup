@@ -1,6 +1,6 @@
 # getharvest-backup
 
-Backup tool for Harvest Time Tracking data using the Harvest API v2. This tool automatically discovers all your Harvest accounts and backs up all data from all endpoints, including invoices, estimates, time entries, projects, clients, and more.
+Backup tool for [Harvest Time Tracking](https://try.hrv.st/4-849377) (Please use our affiliate link to try out Harvest to support the development of this tool as Open Source software) data using the Harvest API v2. This tool automatically discovers all your Harvest accounts and backs up all data from all endpoints, including invoices, estimates, time entries, projects, clients, and more.
 
 We used the [Harvest API v2 OpenAPI specification](https://github.com/jolicode/harvest-openapi-generator), kindly provided by [jolicode](https://github.com/jolicode), to generate this tool.
 
@@ -370,8 +370,10 @@ Contributions are welcome! Please ensure:
 - Type hints are used throughout
 - Code is formatted with black (line length 100) and passes flake8 linting
 
-## Support
+## Support & Sponsoring
 
 For issues, questions, or feature requests, please open an issue on GitHub.
 
-For commercial support please contact us via [our website](https://tektitconsulting.com).
+For commercial support please contact us via [our website](https://tektitconsulting.com) or reach out to [Schlomo](https:/tkt.dev/schlomo).
+
+For small scale sponsoring please use our [Try Harvest](https://try.hrv.st/4-849377) affiliate link to take a look at Harvest for Time Tracking.
